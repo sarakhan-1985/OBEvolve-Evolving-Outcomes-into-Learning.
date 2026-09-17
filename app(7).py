@@ -154,6 +154,13 @@ with st.sidebar:
             st.rerun()
 
 
+
+def back_to_dashboard():
+    """Show a consistent return-to-dashboard button on every non-dashboard page."""
+    if st.button("← Back to Dashboard", key=f"back_dashboard_{st.session_state.page}", use_container_width=False):
+        st.session_state.page = "Dashboard"
+        st.rerun()
+
 def dashboard():
     st.markdown("""<div class='hero'><div style='font-size:3rem'>✨</div><h1>OBEvolve</h1>
     <h2>Evolving Outcomes into Learning</h2><p>Transform PLOs and CLOs into meaningful, aligned and measurable classroom experiences.</p></div>""", unsafe_allow_html=True)
@@ -184,6 +191,7 @@ def dashboard():
 
 
 def course_setup():
+    back_to_dashboard()
     st.header("Course Setup")
     st.write("Create programmes and courses for OBE lesson planning.")
     with st.form("course_form", clear_on_submit=True):
@@ -206,6 +214,7 @@ def course_setup():
 
 
 def outcomes():
+    back_to_dashboard()
     st.header("PLOs & CLOs")
     st.write("Define Programme Learning Outcomes, Course Learning Outcomes and their alignment.")
     tab1, tab2 = st.tabs(["Programme Learning Outcomes", "Course Learning Outcomes"])
@@ -312,6 +321,7 @@ Use exactly these keys:
 
 
 def lesson_planner():
+    back_to_dashboard()
     st.header("OBE Lesson Planner")
     st.write("Develop a lesson aligned with an approved Course Learning Outcome.")
     courses, clos = get_courses(), get_clos()
@@ -383,6 +393,7 @@ def lesson_planner():
 
 
 def saved_plans():
+    back_to_dashboard()
     st.header("Saved Lesson Plans")
     plans = get_plans()
     if not plans:
