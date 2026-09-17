@@ -370,8 +370,15 @@ def saved_plans():
                 st.rerun()
 
 
-if page == "Dashboard": dashboard()
-elif page == "Course Setup": course_setup()
-elif page == "PLOs & CLOs": outcomes()
-elif page == "Lesson Planner": lesson_planner()
-elif page == "Saved Plans": saved_plans()
+page = st.session_state.page
+
+if page == "Dashboard":
+    dashboard()
+elif page == "Course Setup":
+    course_setup()
+elif page == "PLOs & CLOs":
+    outcomes()
+elif page == "Lesson Planner":
+    lesson_planner()
+elif page == "Saved Plans":
+    saved_plans()
