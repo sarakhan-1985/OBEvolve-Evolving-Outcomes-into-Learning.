@@ -112,7 +112,7 @@ def get_plans():
     """)
 
 
-st.set_page_config(page_title="OBE Lesson Planning Assistant", page_icon="✨", layout="wide")
+st.set_page_config(page_title="OBEvolve", page_icon="✨", layout="wide")
 create_tables()
 
 st.markdown("""
@@ -132,15 +132,25 @@ div[data-testid="stMetric"] {background:#fafafa; border:1px solid #eee; padding:
 </style>
 """, unsafe_allow_html=True)
 
+PAGES = ["Dashboard", "Course Setup", "PLOs & CLOs", "Lesson Planner", "Saved Plans"]
+if "page" not in st.session_state:
+    st.session_state.page = "Dashboard"
+
+def go_to(page_name):
+    st.session_state.page = page_name
+
 with st.sidebar:
-    st.title("OBE Planner")
-    page = st.radio("Navigate", ["Dashboard", "Course Setup", "PLOs & CLOs", "Lesson Planner", "Saved Plans"])
-    st.caption("From Outcomes to Impact")
+    st.title("OBEvolve")
+    selected_page = st.radio("Navigate", PAGES, index=PAGES.index(st.session_state.page), key="sidebar_navigation")
+    if selected_page != st.session_state.page:
+        st.session_state.page = selected_page
+        st.rerun()
+    st.caption("Evolving Outcomes into Learning")
 
 
 def dashboard():
-    st.markdown("""<div class='hero'><div style='font-size:3rem'>✨</div><h1>OBE Lesson Planning Assistant</h1>
-    <h2>From Outcomes to Impact</h2><p>Transform PLOs and CLOs into meaningful, aligned and measurable classroom experiences.</p></div>""", unsafe_allow_html=True)
+    st.markdown("""<div class='hero'><div style='font-size:3rem'>✨</div><h1>OBEvolve</h1>
+    <h2>Evolving Outcomes into Learning</h2><p>Transform PLOs and CLOs into meaningful, aligned and measurable classroom experiences.</p></div>""", unsafe_allow_html=True)
     st.header("Build Your OBE Lesson")
     st.write("Follow the OBE journey from programme outcomes to classroom assessment, evaluation and improvement.")
     st.markdown("<div class='flow'>PLO &nbsp; → &nbsp; CLO &nbsp; → &nbsp; Learning Activity &nbsp; → &nbsp; Assessment &nbsp; → &nbsp; Evaluation</div>", unsafe_allow_html=True)
@@ -151,9 +161,19 @@ def dashboard():
         (c3,"📝","Lesson Planner","Design constructively aligned teaching, learning and assessment."),
         (c4,"📂","Saved Plans","Access and review previously created lesson plans."),
     ]
+    button_labels = {
+        "Course Setup": "Open Course Setup",
+        "PLOs & CLOs": "Manage Outcomes",
+        "Lesson Planner": "Create Lesson Plan",
+        "Saved Plans": "View Saved Plans",
+    }
     for col, icon, title, text in cards:
         with col:
             st.markdown(f"<div class='card'><div style='font-size:2.2rem'>{icon}</div><h3>{title}</h3><p class='small'>{text}</p></div>", unsafe_allow_html=True)
+            if st.button(button_labels[title], key=f"dashboard_{title}", use_container_width=True,
+                         type="primary" if title == "Lesson Planner" else "secondary"):
+                go_to(title)
+                st.rerun()
     st.info("💡 OBE is more than mapping outcomes. Effective lesson planning connects what students should achieve, what they do in class, how learning is assessed, and how teaching is continuously improved.")
 
 
