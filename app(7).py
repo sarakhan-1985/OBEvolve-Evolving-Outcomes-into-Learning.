@@ -3,6 +3,9 @@ import os
 import sqlite3
 from io import BytesIO
 
+from docx import Document
+from docx.shared import Pt
+
 import pandas as pd
 import streamlit as st
 from openai import OpenAI
@@ -102,8 +105,8 @@ def create_tables():
             description TEXT NOT NULL,
             bloom_level TEXT NOT NULL,
             plo_id INTEGER,
-            FOREIGN KEY (course_id) REFERENCES courses(id),
-            FOREIGN KEY (plo_id) REFERENCES plos(id)
+            FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+            FOREIGN KEY (plo_id) REFERENCES plos(id) ON DELETE SET NULL
         );
         CREATE TABLE IF NOT EXISTS lesson_plans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -118,8 +121,8 @@ def create_tables():
             assessment_task TEXT,
             success_criterion TEXT,
             evaluation TEXT,
-            FOREIGN KEY (course_id) REFERENCES courses(id),
-            FOREIGN KEY (clo_id) REFERENCES clos(id)
+            FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+            FOREIGN KEY (clo_id) REFERENCES clos(id) ON DELETE CASCADE
         );
         """)
 
@@ -279,6 +282,20 @@ def course_setup():
     st.subheader("Saved Courses")
     if courses:
         st.dataframe(pd.DataFrame(courses)[["programme","course_code","course_title","credit_hours"]], use_container_width=True, hide_index=True)
+        st.markdown("#### Delete Course")
+        course_delete_map = {f"{c['course_code']} - {c['course_title']}": c['id'] for c in courses}
+        delete_course_label = st.selectbox("Select a course to delete", list(course_delete_map), key="delete_course_select")
+        if st.button("🗑️ Delete Selected Course", key="delete_course_btn"):
+            course_id = course_delete_map[delete_course_label]
+            # Explicit cleanup also works with databases created before cascade rules were added.
+            clo_ids = [r["id"] for r in rows("SELECT id FROM clos WHERE course_id=?", (course_id,))]
+            for clo_id in clo_ids:
+                execute("DELETE FROM lesson_plans WHERE clo_id=?", (clo_id,))
+            execute("DELETE FROM lesson_plans WHERE course_id=?", (course_id,))
+            execute("DELETE FROM clos WHERE course_id=?", (course_id,))
+            execute("DELETE FROM courses WHERE id=?", (course_id,))
+            st.success("Course and its related CLOs/lesson plans deleted.")
+            st.rerun()
     else:
         st.caption("No courses saved yet.")
 
@@ -302,6 +319,15 @@ def outcomes():
         plos = get_plos()
         if plos:
             st.dataframe(pd.DataFrame(plos)[["programme","plo_code","description"]], use_container_width=True, hide_index=True)
+            st.markdown("#### Delete PLO")
+            plo_delete_map = {f"{p['plo_code']} - {p['description']}": p['id'] for p in plos}
+            delete_plo_label = st.selectbox("Select a PLO to delete", list(plo_delete_map), key="delete_plo_select")
+            if st.button("🗑️ Delete Selected PLO", key="delete_plo_btn"):
+                plo_id = plo_delete_map[delete_plo_label]
+                execute("UPDATE clos SET plo_id=NULL WHERE plo_id=?", (plo_id,))
+                execute("DELETE FROM plos WHERE id=?", (plo_id,))
+                st.success("PLO deleted. Any linked CLOs were retained and unmapped.")
+                st.rerun()
     with tab2:
         courses, plos = get_courses(), get_plos()
         if not courses or not plos:
@@ -325,6 +351,15 @@ def outcomes():
         if clos:
             df = pd.DataFrame(clos).rename(columns={"course_title":"Course","clo_code":"CLO","description":"Description","bloom_level":"Bloom's Level","plo_code":"Mapped PLO"})
             st.dataframe(df[["Course","CLO","Description","Bloom's Level","Mapped PLO"]], use_container_width=True, hide_index=True)
+            st.markdown("#### Delete CLO")
+            clo_delete_map = {f"{c['course_code']} | {c['clo_code']} - {c['description']}": c['id'] for c in clos}
+            delete_clo_label = st.selectbox("Select a CLO to delete", list(clo_delete_map), key="delete_clo_select")
+            if st.button("🗑️ Delete Selected CLO", key="delete_clo_btn"):
+                clo_id = clo_delete_map[delete_clo_label]
+                execute("DELETE FROM lesson_plans WHERE clo_id=?", (clo_id,))
+                execute("DELETE FROM clos WHERE id=?", (clo_id,))
+                st.success("CLO and lesson plans linked to it deleted.")
+                st.rerun()
 
 
 def api_key_value():
@@ -521,6 +556,14 @@ def lesson_planner():
             except Exception as e:
                 st.error(f"AI generation error: {e}")
 
+    st.markdown("#### Clear / Delete Current Lesson")
+    if st.button("🗑️ Clear Current Lesson Planner", key="clear_current_lesson"):
+        for k in list(st.session_state.keys()):
+            if k.startswith("lp_") or k.startswith("generated_"):
+                del st.session_state[k]
+        st.success("Current lesson planner entries and generated output cleared.")
+        st.rerun()
+
     # Show AI output only after the Generate button has completed successfully.
     if st.session_state.get("generated_plan_ready") and st.session_state.get("generated_plan"):
         p = st.session_state["generated_plan"]
@@ -642,6 +685,47 @@ def lesson_planner():
                     st.success("Lesson plan saved successfully!")
 
 
+
+def lesson_plan_docx(plan):
+    """Create a downloadable Word document for one saved lesson plan."""
+    doc = Document()
+    styles = doc.styles
+    styles["Normal"].font.name = "Aptos"
+    styles["Normal"].font.size = Pt(10.5)
+
+    doc.add_heading("OBE-Aligned Lesson Plan", level=1)
+    doc.add_paragraph(f"{plan['course_code']} - {plan['course_title']}")
+
+    table = doc.add_table(rows=1, cols=2)
+    table.style = "Table Grid"
+    hdr = table.rows[0].cells
+    hdr[0].text = "Lesson Plan Component"
+    hdr[1].text = "Detailed Plan"
+
+    items = [
+        ("Course", f"{plan['course_code']} - {plan['course_title']}"),
+        ("Course Learning Outcome (CLO)", f"{plan['clo_code']}: {plan['clo_description']}"),
+        ("Bloom's Taxonomy Level", plan["bloom_level"]),
+        ("Lesson Topic", plan["topic"]),
+        ("Duration", f"{plan['duration'] or '-'} minutes"),
+        ("Lesson Learning Outcome", plan["lesson_outcome"] or "-"),
+        ("Teaching Method", plan["teaching_method"] or "-"),
+        ("Teaching / Learning Activity", plan["activity"] or "-"),
+        ("Assessment Method", plan["assessment_method"] or "-"),
+        ("Assessment Task", plan["assessment_task"] or "-"),
+        ("Success Criterion", plan["success_criterion"] or "-"),
+        ("Evaluation / Improvement Plan", plan["evaluation"] or "-"),
+    ]
+    for component, detail in items:
+        cells = table.add_row().cells
+        cells[0].text = str(component)
+        cells[1].text = str(detail)
+
+    buf = BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
+
 def saved_plans():
     back_to_dashboard()
     st.header("Saved Lesson Plans")
@@ -662,7 +746,22 @@ def saved_plans():
             st.write(p['success_criterion'] or '-')
             st.markdown("**Evaluation / Improvement Plan**")
             st.write(p['evaluation'] or '-')
-            if st.button("🗑️ Delete", key=f"del_{p['id']}"):
+
+            safe_topic = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in (p["topic"] or "lesson_plan"))
+            docx_bytes = lesson_plan_docx(p)
+            d1, d2 = st.columns(2)
+            with d1:
+                st.download_button(
+                    "⬇️ Download Lesson Plan (Word)",
+                    data=docx_bytes,
+                    file_name=f"OBE_Lesson_Plan_{safe_topic}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    key=f"download_{p['id']}",
+                    use_container_width=True,
+                )
+            with d2:
+                delete_clicked = st.button("🗑️ Delete", key=f"del_{p['id']}", use_container_width=True)
+            if delete_clicked:
                 execute("DELETE FROM lesson_plans WHERE id=?", (p['id'],))
                 st.rerun()
 
