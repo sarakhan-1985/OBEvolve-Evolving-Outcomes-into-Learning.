@@ -141,11 +141,17 @@ def go_to(page_name):
 
 with st.sidebar:
     st.title("OBEvolve")
-    selected_page = st.radio("Navigate", PAGES, index=PAGES.index(st.session_state.page), key="sidebar_navigation")
-    if selected_page != st.session_state.page:
-        st.session_state.page = selected_page
-        st.rerun()
     st.caption("Evolving Outcomes into Learning")
+    st.markdown("### Navigate")
+    for nav_page in PAGES:
+        if st.button(
+            nav_page,
+            key=f"nav_{nav_page}",
+            use_container_width=True,
+            type="primary" if st.session_state.page == nav_page else "secondary",
+        ):
+            st.session_state.page = nav_page
+            st.rerun()
 
 
 def dashboard():
@@ -249,30 +255,60 @@ def api_key_value():
 
 
 def generate_plan(course, clo, topic, duration):
-    prompt = f"""You are an expert university teacher and Outcome-Based Education (OBE) lesson planning specialist.
-Develop a constructively aligned university lesson plan.
+    """Generate an editable OBE-aligned lesson plan with OpenAI."""
+    prompt = f"""You are an expert university teacher and Outcome-Based Education (OBE) lesson-planning specialist.
+
+Create a practical, constructively aligned university lesson plan.
+
 COURSE: {course['course_code']} - {course['course_title']}
 COURSE LEARNING OUTCOME: {clo['clo_code']}: {clo['description']}
 BLOOM'S TAXONOMY LEVEL: {clo['bloom_level']}
 LESSON TOPIC: {topic}
 LESSON DURATION: {duration} minutes
 
-The lesson must demonstrate clear constructive alignment:
-CLO → Lesson Learning Outcome → Teaching Method → Teaching/Learning Activity → Assessment → Success Criterion → Evaluation and Improvement.
+Use this alignment chain:
+CLO → Lesson Learning Outcome → Teaching Method → Teaching/Learning Activity → Assessment → Success Criterion → Evaluation/Improvement.
 
 Requirements:
-- Outcome must be specific, measurable and aligned with the CLO and Bloom's level.
+- Write one specific and measurable lesson learning outcome aligned with the CLO and Bloom's level.
 - Choose exactly one teaching method from: {', '.join(TEACHING_METHODS)}.
-- Give a practical activity explaining teacher and student actions, suitable for the duration.
+- Design a realistic activity for the stated duration and clearly describe teacher and student actions.
 - Choose exactly one assessment method from: {', '.join(ASSESSMENT_METHODS)}.
-- Assessment must directly measure the lesson outcome and CLO.
-- Give a measurable success criterion and a meaningful improvement plan.
-Return ONLY valid JSON with exactly these keys:
+- Make the assessment task directly measure the lesson learning outcome.
+- Give a measurable success criterion.
+- Give a concise evaluation/improvement plan for the teacher.
+- Return ONLY a valid JSON object. Do not add markdown, commentary, or code fences.
+
+Use exactly these keys:
 {{"lesson_outcome":"","teaching_method":"","activity":"","assessment_method":"","assessment_task":"","success_criterion":"","evaluation":""}}"""
+
     client = OpenAI(api_key=api_key_value())
-    response = client.responses.create(model="gpt-5.6-luna", input=prompt)
-    text = response.output_text.strip().replace("```json", "").replace("```", "").strip()
-    return json.loads(text)
+    response = client.responses.create(
+        model="gpt-5.6-luna",
+        input=prompt,
+    )
+
+    raw = response.output_text.strip()
+    raw = raw.replace("```json", "").replace("```", "").strip()
+
+    # Extra protection if the model adds a short sentence around the JSON.
+    first = raw.find("{")
+    last = raw.rfind("}")
+    if first == -1 or last == -1:
+        raise ValueError("The AI response did not contain a valid lesson-plan JSON object.")
+
+    plan = json.loads(raw[first:last + 1])
+
+    required = [
+        "lesson_outcome", "teaching_method", "activity",
+        "assessment_method", "assessment_task",
+        "success_criterion", "evaluation"
+    ]
+    missing = [k for k in required if k not in plan]
+    if missing:
+        raise ValueError("The AI response was incomplete. Missing: " + ", ".join(missing))
+
+    return plan
 
 
 def lesson_planner():
@@ -306,7 +342,7 @@ def lesson_planner():
                     p = generate_plan(course, clo, topic, int(duration))
                 for k, v in p.items():
                     st.session_state[f"lp_{k}"] = v
-                st.success("AI lesson plan generated. Review and edit it before saving.")
+                st.success("✨ AI lesson plan generated successfully. Review or edit any field, then save it.")
                 st.rerun()
             except Exception as e:
                 st.error(f"AI generation error: {e}")
