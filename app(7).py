@@ -507,32 +507,42 @@ def lesson_planner():
                         success_pref,
                         evaluation_pref,
                     )
-                # Keep the teacher's two dropdown choices; populate/refine the text fields.
-                for key in ["lesson_outcome", "activity", "assessment_task", "success_criterion", "evaluation"]:
-                    st.session_state[f"lp_{key}"] = p.get(key, "")
-                st.success("✨ AI lesson plan generated from your choices. Review the completed fields below, then check alignment and save.")
+                # Store AI output separately from teacher-input widget state.
+                st.session_state["generated_plan"] = p
+                st.session_state["generated_plan_ready"] = True
+                st.session_state["generated_course_id"] = course["id"]
+                st.session_state["generated_clo_id"] = clo["id"]
+                st.session_state["generated_topic"] = topic
+                st.session_state["generated_duration"] = int(duration)
+                st.session_state["generated_teaching_method"] = teaching_method
+                st.session_state["generated_assessment_method"] = assessment_method
                 st.rerun()
             except Exception as e:
                 st.error(f"AI generation error: {e}")
 
-    st.markdown("### Generated Lesson Plan — Detailed Table")
-    st.caption("The table below summarizes the complete OBE-aligned lesson plan using the teacher's selections and the AI-developed details.")
+    # Show AI output only after the Generate button has completed successfully.
+    if st.session_state.get("generated_plan_ready") and st.session_state.get("generated_plan"):
+        p = st.session_state["generated_plan"]
 
-    if st.session_state.get("lp_lesson_outcome"):
+        st.success("✨ AI lesson plan generated successfully from the teacher's choices.")
+        st.markdown("### Generated Lesson Plan — Detailed Table")
+        st.caption("This table appears only after generation and summarizes the complete OBE-aligned lesson plan.")
+
         lesson_table = pd.DataFrame([
             {"Lesson Plan Component": "Course", "Detailed Plan": f"{course['course_code']} - {course['course_title']}"},
             {"Lesson Plan Component": "Course Learning Outcome (CLO)", "Detailed Plan": f"{clo['clo_code']}: {clo['description']}"},
             {"Lesson Plan Component": "Bloom's Taxonomy Level", "Detailed Plan": clo['bloom_level']},
             {"Lesson Plan Component": "Lesson Topic", "Detailed Plan": topic},
             {"Lesson Plan Component": "Duration", "Detailed Plan": f"{int(duration)} minutes"},
-            {"Lesson Plan Component": "Lesson Learning Outcome", "Detailed Plan": st.session_state.get("lp_lesson_outcome", "")},
+            {"Lesson Plan Component": "Lesson Learning Outcome", "Detailed Plan": p.get("lesson_outcome", "")},
             {"Lesson Plan Component": "Teaching Method", "Detailed Plan": teaching_method},
-            {"Lesson Plan Component": "Teaching / Learning Activity", "Detailed Plan": st.session_state.get("lp_activity", "")},
+            {"Lesson Plan Component": "Teaching / Learning Activity", "Detailed Plan": p.get("activity", "")},
             {"Lesson Plan Component": "Assessment Method", "Detailed Plan": assessment_method},
-            {"Lesson Plan Component": "Assessment Task", "Detailed Plan": st.session_state.get("lp_assessment_task", "")},
-            {"Lesson Plan Component": "Success Criterion", "Detailed Plan": st.session_state.get("lp_success_criterion", "")},
-            {"Lesson Plan Component": "Evaluation / Improvement Plan", "Detailed Plan": st.session_state.get("lp_evaluation", "")},
+            {"Lesson Plan Component": "Assessment Task", "Detailed Plan": p.get("assessment_task", "")},
+            {"Lesson Plan Component": "Success Criterion", "Detailed Plan": p.get("success_criterion", "")},
+            {"Lesson Plan Component": "Evaluation / Improvement Plan", "Detailed Plan": p.get("evaluation", "")},
         ])
+
         st.dataframe(
             lesson_table,
             use_container_width=True,
@@ -542,46 +552,42 @@ def lesson_planner():
                 "Detailed Plan": st.column_config.TextColumn("Detailed Plan", width="large"),
             },
         )
-        st.info("✏️ To revise the generated lesson, edit the fields above. The table will update automatically.")
-    else:
-        st.info("Complete your choices and click **Generate AI-Aligned Lesson Plan** to display the detailed lesson plan table here.")
 
-    st.markdown("### Review & Finalize")
-    st.caption("Review or edit the generated fields above, then check OBE alignment and save the lesson plan.")
+        st.markdown("### Review & Finalize")
+        c1, c2 = st.columns(2)
 
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("✅ Check OBE Alignment", use_container_width=True):
-            fields = [
-                st.session_state.get("lp_lesson_outcome"),
-                st.session_state.get("lp_activity"),
-                st.session_state.get("lp_assessment_task"),
-                st.session_state.get("lp_success_criterion"),
-                st.session_state.get("lp_evaluation"),
-            ]
-            score = sum(bool(x and str(x).strip()) for x in fields) * 20
-            st.metric("Alignment Score", f"{score}%")
-            if score >= 80:
-                st.success("This lesson demonstrates strong structural OBE alignment.")
-            elif score >= 60:
-                st.warning("The lesson is partially aligned. Some elements should be strengthened.")
-            else:
-                st.error("The lesson requires further OBE alignment.")
-            st.caption("This is a completeness-based alignment check, not a substitute for academic review.")
+        with c1:
+            if st.button("✅ Check OBE Alignment", use_container_width=True):
+                fields = [
+                    p.get("lesson_outcome"),
+                    p.get("activity"),
+                    p.get("assessment_task"),
+                    p.get("success_criterion"),
+                    p.get("evaluation"),
+                ]
+                score = sum(bool(x and str(x).strip()) for x in fields) * 20
+                st.metric("Alignment Score", f"{score}%")
+                if score >= 80:
+                    st.success("This lesson demonstrates strong structural OBE alignment.")
+                elif score >= 60:
+                    st.warning("The lesson is partially aligned. Some elements should be strengthened.")
+                else:
+                    st.error("The lesson requires further OBE alignment.")
+                st.caption("This is a completeness-based alignment check, not a substitute for academic review.")
 
-    with c2:
-        if st.button("💾 Save Lesson Plan", use_container_width=True):
-            outcome = st.session_state.get("lp_lesson_outcome", "").strip()
-            if not topic or not outcome:
-                st.warning("Generate/review the lesson plan first. Lesson topic and learning outcome are required.")
-            else:
-                execute("""INSERT INTO lesson_plans(course_id,clo_id,topic,duration,lesson_outcome,teaching_method,activity,assessment_method,assessment_task,success_criterion,evaluation)
-                           VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
-                        (course['id'], clo['id'], topic, int(duration), outcome,
-                         teaching_method, st.session_state.get("lp_activity", ""),
-                         assessment_method, st.session_state.get("lp_assessment_task", ""),
-                         st.session_state.get("lp_success_criterion", ""), st.session_state.get("lp_evaluation", "")))
-                st.success("Lesson plan saved successfully!")
+        with c2:
+            if st.button("💾 Save Lesson Plan", use_container_width=True):
+                outcome = p.get("lesson_outcome", "").strip()
+                if not topic or not outcome:
+                    st.warning("A lesson topic and generated learning outcome are required.")
+                else:
+                    execute("""INSERT INTO lesson_plans(course_id,clo_id,topic,duration,lesson_outcome,teaching_method,activity,assessment_method,assessment_task,success_criterion,evaluation)
+                               VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                            (course['id'], clo['id'], topic, int(duration), outcome,
+                             teaching_method, p.get("activity", ""),
+                             assessment_method, p.get("assessment_task", ""),
+                             p.get("success_criterion", ""), p.get("evaluation", "")))
+                    st.success("Lesson plan saved successfully!")
 
 
 def saved_plans():
