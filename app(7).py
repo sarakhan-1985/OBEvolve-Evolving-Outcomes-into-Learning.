@@ -364,10 +364,11 @@ Requirements:
 - If the teacher supplied draft text, improve and align it rather than ignoring it.
 - If a text field is blank, generate an appropriate entry.
 - Keep the lesson learning outcome measurable and aligned with the CLO and Bloom's level.
-- Make the activity realistic for the stated duration and clearly describe teacher and student actions.
-- Make the assessment task directly measure the lesson learning outcome.
-- Give a measurable success criterion.
-- Give a concise evaluation/improvement plan.
+- Make the activity detailed and realistic for the stated duration. Break it into timed lesson stages and clearly describe teacher actions, student actions, resources/materials, and expected student output.
+- Make the assessment task directly measure the lesson learning outcome. Explain what students will do, what evidence will be collected, and how it will be judged.
+- Give a specific, measurable success criterion with a clear threshold.
+- Give a detailed evaluation/improvement plan explaining what evidence the teacher will review, what will count as a weakness, and what instructional adjustment will follow.
+- Write sufficiently detailed entries for practical classroom use rather than short labels or one-sentence summaries.
 - Return ONLY a valid JSON object with no markdown or commentary.
 
 Use exactly these keys:
@@ -528,29 +529,80 @@ def lesson_planner():
         st.markdown("### Generated Lesson Plan — Detailed Table")
         st.caption("This table appears only after generation and summarizes the complete OBE-aligned lesson plan.")
 
-        lesson_table = pd.DataFrame([
-            {"Lesson Plan Component": "Course", "Detailed Plan": f"{course['course_code']} - {course['course_title']}"},
-            {"Lesson Plan Component": "Course Learning Outcome (CLO)", "Detailed Plan": f"{clo['clo_code']}: {clo['description']}"},
-            {"Lesson Plan Component": "Bloom's Taxonomy Level", "Detailed Plan": clo['bloom_level']},
-            {"Lesson Plan Component": "Lesson Topic", "Detailed Plan": topic},
-            {"Lesson Plan Component": "Duration", "Detailed Plan": f"{int(duration)} minutes"},
-            {"Lesson Plan Component": "Lesson Learning Outcome", "Detailed Plan": p.get("lesson_outcome", "")},
-            {"Lesson Plan Component": "Teaching Method", "Detailed Plan": teaching_method},
-            {"Lesson Plan Component": "Teaching / Learning Activity", "Detailed Plan": p.get("activity", "")},
-            {"Lesson Plan Component": "Assessment Method", "Detailed Plan": assessment_method},
-            {"Lesson Plan Component": "Assessment Task", "Detailed Plan": p.get("assessment_task", "")},
-            {"Lesson Plan Component": "Success Criterion", "Detailed Plan": p.get("success_criterion", "")},
-            {"Lesson Plan Component": "Evaluation / Improvement Plan", "Detailed Plan": p.get("evaluation", "")},
-        ])
+        table_rows = [
+            ("Course", f"{course['course_code']} - {course['course_title']}"),
+            ("Course Learning Outcome (CLO)", f"{clo['clo_code']}: {clo['description']}"),
+            ("Bloom's Taxonomy Level", clo['bloom_level']),
+            ("Lesson Topic", topic),
+            ("Duration", f"{int(duration)} minutes"),
+            ("Lesson Learning Outcome", p.get("lesson_outcome", "")),
+            ("Teaching Method", teaching_method),
+            ("Teaching / Learning Activity", p.get("activity", "")),
+            ("Assessment Method", assessment_method),
+            ("Assessment Task", p.get("assessment_task", "")),
+            ("Success Criterion", p.get("success_criterion", "")),
+            ("Evaluation / Improvement Plan", p.get("evaluation", "")),
+        ]
 
-        st.dataframe(
-            lesson_table,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Lesson Plan Component": st.column_config.TextColumn("Lesson Plan Component", width="medium"),
-                "Detailed Plan": st.column_config.TextColumn("Detailed Plan", width="large"),
-            },
+        import html
+        rows_html = "".join(
+            f"<tr><td class='component'>{html.escape(str(component))}</td>"
+            f"<td class='detail'>{html.escape(str(detail)).replace(chr(10), '<br>')}</td></tr>"
+            for component, detail in table_rows
+        )
+
+        st.markdown(
+            f"""
+            <style>
+            .lesson-table-wrap {{
+                width: 100%;
+                overflow: visible;
+                margin: 0.5rem 0 1.5rem 0;
+            }}
+            .lesson-table {{
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                font-size: 1rem;
+                line-height: 1.55;
+            }}
+            .lesson-table th {{
+                background: #f3f4f6;
+                padding: 14px 16px;
+                border: 1px solid #d1d5db;
+                text-align: left;
+                font-weight: 700;
+            }}
+            .lesson-table td {{
+                padding: 14px 16px;
+                border: 1px solid #d1d5db;
+                vertical-align: top;
+                white-space: normal !important;
+                overflow-wrap: anywhere;
+                word-break: normal;
+            }}
+            .lesson-table .component {{
+                width: 24%;
+                font-weight: 650;
+                background: #fafafa;
+            }}
+            .lesson-table .detail {{
+                width: 76%;
+            }}
+            </style>
+            <div class="lesson-table-wrap">
+                <table class="lesson-table">
+                    <thead>
+                        <tr>
+                            <th style="width:24%">Lesson Plan Component</th>
+                            <th style="width:76%">Detailed Plan</th>
+                        </tr>
+                    </thead>
+                    <tbody>{rows_html}</tbody>
+                </table>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
         st.markdown("### Review & Finalize")
