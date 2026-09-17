@@ -17,6 +17,58 @@ ASSESSMENT_METHODS = [
     "Quiz", "Worksheet", "Class Activity", "Presentation", "Written Task",
     "Reflection", "Peer Assessment", "Group Task", "Exit Ticket", "Project",
 ]
+
+ACTIVITY_OPTIONS = [
+    "AI to generate based on my selections",
+    "Think-Pair-Share",
+    "Small-group discussion",
+    "Guided practice",
+    "Case-study analysis",
+    "Problem-solving task",
+    "Collaborative worksheet",
+    "Peer review / peer feedback",
+    "Individual practice",
+    "Mini presentation",
+    "Reflection activity",
+    "Custom / I will type my own",
+]
+
+ASSESSMENT_TASK_OPTIONS = [
+    "AI to generate based on my selections",
+    "Short quiz",
+    "Worksheet / guided task",
+    "Exit ticket",
+    "Written response",
+    "Case/problem solution",
+    "Group task output",
+    "Mini presentation",
+    "Reflection response",
+    "Peer-assessment task",
+    "Project / product",
+    "Custom / I will type my own",
+]
+
+SUCCESS_CRITERION_OPTIONS = [
+    "AI to generate a measurable criterion",
+    "At least 80% of students achieve 70% or above",
+    "At least 75% of students meet all task requirements",
+    "Students correctly complete at least 4 out of 5 items",
+    "Students demonstrate the target skill with at least 70% accuracy",
+    "Students meet at least 3 out of 4 rubric criteria",
+    "All groups produce an acceptable task outcome",
+    "Custom / I will type my own",
+]
+
+EVALUATION_OPTIONS = [
+    "AI to generate an evaluation/improvement plan",
+    "Review assessment results and reteach weak areas",
+    "Use exit-ticket evidence to adjust the next lesson",
+    "Identify common errors and provide targeted follow-up practice",
+    "Compare student performance with the success criterion and revise instruction",
+    "Collect student feedback and refine the activity",
+    "Provide additional support to students below the success criterion",
+    "Custom / I will type my own",
+]
 BLOOM_LEVELS = ["Remember", "Understand", "Apply", "Analyze", "Evaluate", "Create"]
 
 
@@ -370,14 +422,72 @@ def lesson_planner():
 
     st.text_area("7. Lesson Learning Outcome (optional draft)", key="lp_lesson_outcome", height=90,
                  placeholder="Write your own outcome, or leave blank for AI.")
-    st.text_area("8. Teaching / Learning Activity (optional idea)", key="lp_activity", height=130,
-                 placeholder="Add your activity idea, or leave blank for AI.")
-    st.text_area("9. Assessment Task (optional idea)", key="lp_assessment_task", height=100,
-                 placeholder="Add your assessment task, or leave blank for AI.")
-    st.text_input("10. Success Criterion (optional)", key="lp_success_criterion",
-                  placeholder="e.g. 80% of students achieve at least 70%, or leave blank for AI.")
-    st.text_area("11. Evaluation / Improvement Plan (optional)", key="lp_evaluation", height=100,
-                 placeholder="Add your improvement idea, or leave blank for AI.")
+    activity_choice = st.selectbox(
+        "8. Teaching / Learning Activity",
+        ACTIVITY_OPTIONS,
+        key="lp_activity_choice",
+    )
+    if activity_choice == "Custom / I will type my own":
+        activity_pref = st.text_area(
+            "Your Teaching / Learning Activity",
+            key="lp_activity_custom",
+            height=100,
+            placeholder="Type your activity idea here.",
+        )
+    elif activity_choice == "AI to generate based on my selections":
+        activity_pref = ""
+    else:
+        activity_pref = activity_choice
+
+    assessment_task_choice = st.selectbox(
+        "9. Assessment Task",
+        ASSESSMENT_TASK_OPTIONS,
+        key="lp_assessment_task_choice",
+    )
+    if assessment_task_choice == "Custom / I will type my own":
+        assessment_task_pref = st.text_area(
+            "Your Assessment Task",
+            key="lp_assessment_task_custom",
+            height=90,
+            placeholder="Type your assessment task here.",
+        )
+    elif assessment_task_choice == "AI to generate based on my selections":
+        assessment_task_pref = ""
+    else:
+        assessment_task_pref = assessment_task_choice
+
+    success_choice = st.selectbox(
+        "10. Success Criterion",
+        SUCCESS_CRITERION_OPTIONS,
+        key="lp_success_criterion_choice",
+    )
+    if success_choice == "Custom / I will type my own":
+        success_pref = st.text_input(
+            "Your Success Criterion",
+            key="lp_success_criterion_custom",
+            placeholder="Type a measurable success criterion.",
+        )
+    elif success_choice == "AI to generate a measurable criterion":
+        success_pref = ""
+    else:
+        success_pref = success_choice
+
+    evaluation_choice = st.selectbox(
+        "11. Evaluation / Improvement Plan",
+        EVALUATION_OPTIONS,
+        key="lp_evaluation_choice",
+    )
+    if evaluation_choice == "Custom / I will type my own":
+        evaluation_pref = st.text_area(
+            "Your Evaluation / Improvement Plan",
+            key="lp_evaluation_custom",
+            height=90,
+            placeholder="Type your evaluation or improvement idea.",
+        )
+    elif evaluation_choice == "AI to generate an evaluation/improvement plan":
+        evaluation_pref = ""
+    else:
+        evaluation_pref = evaluation_choice
 
     st.markdown("---")
     if st.button("✨ GENERATE AI-ALIGNED LESSON PLAN", type="primary", use_container_width=True):
@@ -392,10 +502,10 @@ def lesson_planner():
                         course, clo, topic, int(duration),
                         teaching_method, assessment_method,
                         st.session_state.get("lp_lesson_outcome", ""),
-                        st.session_state.get("lp_activity", ""),
-                        st.session_state.get("lp_assessment_task", ""),
-                        st.session_state.get("lp_success_criterion", ""),
-                        st.session_state.get("lp_evaluation", ""),
+                        activity_pref,
+                        assessment_task_pref,
+                        success_pref,
+                        evaluation_pref,
                     )
                 # Keep the teacher's two dropdown choices; populate/refine the text fields.
                 for key in ["lesson_outcome", "activity", "assessment_task", "success_criterion", "evaluation"]:
