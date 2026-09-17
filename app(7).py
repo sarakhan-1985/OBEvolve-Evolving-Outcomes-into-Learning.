@@ -281,131 +281,195 @@ def api_key_value():
     return os.getenv("OPENAI_API_KEY")
 
 
-def generate_plan(course, clo, topic, duration):
-    """Generate an editable OBE-aligned lesson plan with OpenAI."""
+def generate_plan(course, clo, topic, duration, teaching_method, assessment_method,
+                  lesson_outcome="", activity="", assessment_task="",
+                  success_criterion="", evaluation=""):
+    """Generate/refine an OBE-aligned lesson plan from the teacher's selected inputs."""
     prompt = f"""You are an expert university teacher and Outcome-Based Education (OBE) lesson-planning specialist.
 
-Create a practical, constructively aligned university lesson plan.
+Create a practical, constructively aligned university lesson plan using the teacher's choices below.
 
 COURSE: {course['course_code']} - {course['course_title']}
 COURSE LEARNING OUTCOME: {clo['clo_code']}: {clo['description']}
 BLOOM'S TAXONOMY LEVEL: {clo['bloom_level']}
 LESSON TOPIC: {topic}
 LESSON DURATION: {duration} minutes
+TEACHER-SELECTED TEACHING METHOD: {teaching_method}
+TEACHER-SELECTED ASSESSMENT METHOD: {assessment_method}
+
+OPTIONAL TEACHER DRAFTS / PREFERENCES:
+Lesson Learning Outcome: {lesson_outcome or 'Not provided'}
+Teaching/Learning Activity: {activity or 'Not provided'}
+Assessment Task: {assessment_task or 'Not provided'}
+Success Criterion: {success_criterion or 'Not provided'}
+Evaluation/Improvement Plan: {evaluation or 'Not provided'}
 
 Use this alignment chain:
 CLO → Lesson Learning Outcome → Teaching Method → Teaching/Learning Activity → Assessment → Success Criterion → Evaluation/Improvement.
 
 Requirements:
-- Write one specific and measurable lesson learning outcome aligned with the CLO and Bloom's level.
-- Choose exactly one teaching method from: {', '.join(TEACHING_METHODS)}.
-- Design a realistic activity for the stated duration and clearly describe teacher and student actions.
-- Choose exactly one assessment method from: {', '.join(ASSESSMENT_METHODS)}.
+- Preserve the teacher-selected teaching method and assessment method exactly.
+- If the teacher supplied draft text, improve and align it rather than ignoring it.
+- If a text field is blank, generate an appropriate entry.
+- Keep the lesson learning outcome measurable and aligned with the CLO and Bloom's level.
+- Make the activity realistic for the stated duration and clearly describe teacher and student actions.
 - Make the assessment task directly measure the lesson learning outcome.
 - Give a measurable success criterion.
-- Give a concise evaluation/improvement plan for the teacher.
-- Return ONLY a valid JSON object. Do not add markdown, commentary, or code fences.
+- Give a concise evaluation/improvement plan.
+- Return ONLY a valid JSON object with no markdown or commentary.
 
 Use exactly these keys:
 {{"lesson_outcome":"","teaching_method":"","activity":"","assessment_method":"","assessment_task":"","success_criterion":"","evaluation":""}}"""
 
     client = OpenAI(api_key=api_key_value())
-    response = client.responses.create(
-        model="gpt-5.6-luna",
-        input=prompt,
-    )
-
-    raw = response.output_text.strip()
-    raw = raw.replace("```json", "").replace("```", "").strip()
-
-    # Extra protection if the model adds a short sentence around the JSON.
-    first = raw.find("{")
-    last = raw.rfind("}")
+    response = client.responses.create(model="gpt-5.6-luna", input=prompt)
+    raw = response.output_text.strip().replace("```json", "").replace("```", "").strip()
+    first, last = raw.find("{"), raw.rfind("}")
     if first == -1 or last == -1:
         raise ValueError("The AI response did not contain a valid lesson-plan JSON object.")
-
     plan = json.loads(raw[first:last + 1])
-
-    required = [
-        "lesson_outcome", "teaching_method", "activity",
-        "assessment_method", "assessment_task",
-        "success_criterion", "evaluation"
-    ]
+    required = ["lesson_outcome", "teaching_method", "activity", "assessment_method",
+                "assessment_task", "success_criterion", "evaluation"]
     missing = [k for k in required if k not in plan]
     if missing:
         raise ValueError("The AI response was incomplete. Missing: " + ", ".join(missing))
-
     return plan
 
 
 def lesson_planner():
     back_to_dashboard()
     st.header("OBE Lesson Planner")
-    st.write("Develop a lesson aligned with an approved Course Learning Outcome.")
+    st.write("Choose the lesson requirements first. AI will then generate or refine the complete OBE-aligned lesson plan.")
+
     courses, clos = get_courses(), get_clos()
     if not courses or not clos:
         st.warning("Please create a course, PLO and CLO first.")
         return
+
     course_map = {f"{c['course_code']} - {c['course_title']}": c for c in courses}
-    course_label = st.selectbox("Select Course", list(course_map), key="lp_course")
+    course_label = st.selectbox("1. Select Course", list(course_map), key="lp_course")
     course = course_map[course_label]
+
     filtered = [c for c in clos if c["course_id"] == course["id"]]
     if not filtered:
         st.warning("This course has no CLOs yet.")
         return
-    clo_map = {f"{c['clo_code']} - {c['description']} [{c['bloom_level']}]": c for c in filtered}
-    clo_label = st.selectbox("Select CLO", list(clo_map), key="lp_clo")
-    clo = clo_map[clo_label]
-    topic = st.text_input("Lesson Topic", key="lp_topic", placeholder="e.g. Paraphrasing")
-    duration = st.number_input("Lesson Duration (minutes)", 10, 360, 60, key="lp_duration")
 
-    if st.button("✨ Generate AI Lesson Plan", type="primary", use_container_width=True):
+    clo_map = {f"{c['clo_code']} - {c['description']} [{c['bloom_level']}]": c for c in filtered}
+    clo_label = st.selectbox("2. Select CLO", list(clo_map), key="lp_clo")
+    clo = clo_map[clo_label]
+
+    topic = st.text_input("3. Lesson Topic", key="lp_topic", placeholder="e.g. Paraphrasing")
+    duration = st.number_input("4. Lesson Duration (minutes)", 10, 360, 60, key="lp_duration")
+
+    st.markdown("### Choose Your Lesson Design")
+    st.caption("Select your preferred teaching and assessment approaches. You may also add your own ideas in the text fields, or leave them blank for AI to develop.")
+
+    teaching_method = st.selectbox("5. Teaching Method", TEACHING_METHODS, key="lp_teaching_method_select")
+    assessment_method = st.selectbox("6. Assessment Method", ASSESSMENT_METHODS, key="lp_assessment_method_select")
+
+    st.text_area("7. Lesson Learning Outcome (optional draft)", key="lp_lesson_outcome", height=90,
+                 placeholder="Write your own outcome, or leave blank for AI.")
+    st.text_area("8. Teaching / Learning Activity (optional idea)", key="lp_activity", height=130,
+                 placeholder="Add your activity idea, or leave blank for AI.")
+    st.text_area("9. Assessment Task (optional idea)", key="lp_assessment_task", height=100,
+                 placeholder="Add your assessment task, or leave blank for AI.")
+    st.text_input("10. Success Criterion (optional)", key="lp_success_criterion",
+                  placeholder="e.g. 80% of students achieve at least 70%, or leave blank for AI.")
+    st.text_area("11. Evaluation / Improvement Plan (optional)", key="lp_evaluation", height=100,
+                 placeholder="Add your improvement idea, or leave blank for AI.")
+
+    st.markdown("---")
+    if st.button("✨ GENERATE AI-ALIGNED LESSON PLAN", type="primary", use_container_width=True):
         if not topic:
             st.warning("Please enter the lesson topic.")
         elif not api_key_value():
             st.error("OPENAI_API_KEY is not configured. Add it to Streamlit Secrets or your environment variables.")
         else:
             try:
-                with st.spinner("Generating AI-assisted lesson plan..."):
-                    p = generate_plan(course, clo, topic, int(duration))
-                for k, v in p.items():
-                    st.session_state[f"lp_{k}"] = v
-                st.success("✨ AI lesson plan generated successfully. Review or edit any field, then save it.")
+                with st.spinner("Generating your OBE-aligned lesson plan from the selected choices..."):
+                    p = generate_plan(
+                        course, clo, topic, int(duration),
+                        teaching_method, assessment_method,
+                        st.session_state.get("lp_lesson_outcome", ""),
+                        st.session_state.get("lp_activity", ""),
+                        st.session_state.get("lp_assessment_task", ""),
+                        st.session_state.get("lp_success_criterion", ""),
+                        st.session_state.get("lp_evaluation", ""),
+                    )
+                # Keep the teacher's two dropdown choices; populate/refine the text fields.
+                for key in ["lesson_outcome", "activity", "assessment_task", "success_criterion", "evaluation"]:
+                    st.session_state[f"lp_{key}"] = p.get(key, "")
+                st.success("✨ AI lesson plan generated from your choices. Review the completed fields below, then check alignment and save.")
                 st.rerun()
             except Exception as e:
                 st.error(f"AI generation error: {e}")
 
-    st.text_area("Lesson Learning Outcome", key="lp_lesson_outcome", height=100)
-    tm_default = st.session_state.get("lp_teaching_method")
-    st.selectbox("Teaching Method", TEACHING_METHODS, index=TEACHING_METHODS.index(tm_default) if tm_default in TEACHING_METHODS else 0, key="lp_teaching_method_select")
-    st.text_area("Teaching / Learning Activity", key="lp_activity", height=180)
-    am_default = st.session_state.get("lp_assessment_method")
-    st.selectbox("Assessment Method", ASSESSMENT_METHODS, index=ASSESSMENT_METHODS.index(am_default) if am_default in ASSESSMENT_METHODS else 0, key="lp_assessment_method_select")
-    st.text_area("Assessment Task", key="lp_assessment_task", height=130)
-    st.text_input("Success Criterion", key="lp_success_criterion", placeholder="e.g. 80% of students achieve at least 70%")
-    st.text_area("Evaluation / Improvement Plan", key="lp_evaluation", height=130)
+    st.markdown("### Generated Lesson Plan — Detailed Table")
+    st.caption("The table below summarizes the complete OBE-aligned lesson plan using the teacher's selections and the AI-developed details.")
+
+    if st.session_state.get("lp_lesson_outcome"):
+        lesson_table = pd.DataFrame([
+            {"Lesson Plan Component": "Course", "Detailed Plan": f"{course['course_code']} - {course['course_title']}"},
+            {"Lesson Plan Component": "Course Learning Outcome (CLO)", "Detailed Plan": f"{clo['clo_code']}: {clo['description']}"},
+            {"Lesson Plan Component": "Bloom's Taxonomy Level", "Detailed Plan": clo['bloom_level']},
+            {"Lesson Plan Component": "Lesson Topic", "Detailed Plan": topic},
+            {"Lesson Plan Component": "Duration", "Detailed Plan": f"{int(duration)} minutes"},
+            {"Lesson Plan Component": "Lesson Learning Outcome", "Detailed Plan": st.session_state.get("lp_lesson_outcome", "")},
+            {"Lesson Plan Component": "Teaching Method", "Detailed Plan": teaching_method},
+            {"Lesson Plan Component": "Teaching / Learning Activity", "Detailed Plan": st.session_state.get("lp_activity", "")},
+            {"Lesson Plan Component": "Assessment Method", "Detailed Plan": assessment_method},
+            {"Lesson Plan Component": "Assessment Task", "Detailed Plan": st.session_state.get("lp_assessment_task", "")},
+            {"Lesson Plan Component": "Success Criterion", "Detailed Plan": st.session_state.get("lp_success_criterion", "")},
+            {"Lesson Plan Component": "Evaluation / Improvement Plan", "Detailed Plan": st.session_state.get("lp_evaluation", "")},
+        ])
+        st.dataframe(
+            lesson_table,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Lesson Plan Component": st.column_config.TextColumn("Lesson Plan Component", width="medium"),
+                "Detailed Plan": st.column_config.TextColumn("Detailed Plan", width="large"),
+            },
+        )
+        st.info("✏️ To revise the generated lesson, edit the fields above. The table will update automatically.")
+    else:
+        st.info("Complete your choices and click **Generate AI-Aligned Lesson Plan** to display the detailed lesson plan table here.")
+
+    st.markdown("### Review & Finalize")
+    st.caption("Review or edit the generated fields above, then check OBE alignment and save the lesson plan.")
 
     c1, c2 = st.columns(2)
     with c1:
         if st.button("✅ Check OBE Alignment", use_container_width=True):
-            fields = [st.session_state.get("lp_lesson_outcome"), st.session_state.get("lp_activity"), st.session_state.get("lp_assessment_task"), st.session_state.get("lp_success_criterion"), st.session_state.get("lp_evaluation")]
+            fields = [
+                st.session_state.get("lp_lesson_outcome"),
+                st.session_state.get("lp_activity"),
+                st.session_state.get("lp_assessment_task"),
+                st.session_state.get("lp_success_criterion"),
+                st.session_state.get("lp_evaluation"),
+            ]
             score = sum(bool(x and str(x).strip()) for x in fields) * 20
             st.metric("Alignment Score", f"{score}%")
-            if score >= 80: st.success("This lesson demonstrates strong structural OBE alignment.")
-            elif score >= 60: st.warning("The lesson is partially aligned. Some elements should be strengthened.")
-            else: st.error("The lesson requires further OBE alignment.")
+            if score >= 80:
+                st.success("This lesson demonstrates strong structural OBE alignment.")
+            elif score >= 60:
+                st.warning("The lesson is partially aligned. Some elements should be strengthened.")
+            else:
+                st.error("The lesson requires further OBE alignment.")
             st.caption("This is a completeness-based alignment check, not a substitute for academic review.")
+
     with c2:
         if st.button("💾 Save Lesson Plan", use_container_width=True):
             outcome = st.session_state.get("lp_lesson_outcome", "").strip()
             if not topic or not outcome:
-                st.warning("Lesson topic and learning outcome are required.")
+                st.warning("Generate/review the lesson plan first. Lesson topic and learning outcome are required.")
             else:
                 execute("""INSERT INTO lesson_plans(course_id,clo_id,topic,duration,lesson_outcome,teaching_method,activity,assessment_method,assessment_task,success_criterion,evaluation)
                            VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
                         (course['id'], clo['id'], topic, int(duration), outcome,
-                         st.session_state.get("lp_teaching_method_select"), st.session_state.get("lp_activity", ""),
-                         st.session_state.get("lp_assessment_method_select"), st.session_state.get("lp_assessment_task", ""),
+                         teaching_method, st.session_state.get("lp_activity", ""),
+                         assessment_method, st.session_state.get("lp_assessment_task", ""),
                          st.session_state.get("lp_success_criterion", ""), st.session_state.get("lp_evaluation", "")))
                 st.success("Lesson plan saved successfully!")
 
