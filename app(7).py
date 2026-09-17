@@ -156,10 +156,28 @@ with st.sidebar:
 
 
 def back_to_dashboard():
-    """Show a consistent return-to-dashboard button on every non-dashboard page."""
-    if st.button("← Back to Dashboard", key=f"back_dashboard_{st.session_state.page}", use_container_width=False):
-        st.session_state.page = "Dashboard"
-        st.rerun()
+    """Show a prominent return-to-dashboard control on every non-dashboard page."""
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stButton"]:has(button[kind="primary"]) button {
+            font-weight: 700;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    left, spacer = st.columns([1.7, 5])
+    with left:
+        if st.button(
+            "🏠  BACK TO DASHBOARD",
+            key=f"back_dashboard_{st.session_state.page}",
+            type="primary",
+            use_container_width=True,
+        ):
+            st.session_state.page = "Dashboard"
+            st.rerun()
+    st.markdown("<div style='height:0.25rem'></div>", unsafe_allow_html=True)
 
 def dashboard():
     st.markdown("""<div class='hero'><div style='font-size:3rem'>✨</div><h1>OBEvolve</h1>
